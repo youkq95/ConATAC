@@ -1,0 +1,8 @@
+GM12878/P/
+GM12878/P_kmeans_ari_curves/
+public_data/
+*.log
+*.ipynb_checkpoints
+*.ipynb
+*.pycGM12878/*.bigwig
+GM12878/*.bw
