@@ -4,5 +4,15 @@ public_data/
 *.log
 *.ipynb_checkpoints
 *.ipynb
-*.pycGM12878/*.bigwig
+
+# Python compiled files and cache
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Large genomic binary files
+GM12878/*.bigwig
 GM12878/*.bw
+
+# Spreadsheets / large data files
+*.xlsx
