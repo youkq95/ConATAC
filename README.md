@@ -60,7 +60,7 @@ Available choices are bulk and sc(single cell). If the species is set to mouse, 
 Use the species parameter to select whether to process human cells or mouse cells.
 Available choices are human and mouse.
 
-## If in Step 1 the species is set to "Mouse CD8 T cells", please first run Step 1 with cell_line=GM12878, mode=P, and species=human.
+#### If in Step 1 the species is set to "Mouse CD8 T cells", please first run Step 1 with cell_line=GM12878, mode=P, and species=human.
 
 ## Step 1: Calculate Clustering Coefficient
 This script calculates the clustering coefficient using the specified file path, cell line, and mode.
