@@ -52,9 +52,9 @@ def save_split_to_npz(split_name, csv_path, npy_dir, output_dir):
             data_list.append(matrix)
             labels.append(label)
         else:
-            print(f"no such file：{npy_file_path}")
+            print(f"no such file:{npy_file_path}")
     if len(data_list) == 0:
-        print(f"warning：{split_name} no any data")
+        print(f"warning:{split_name} no any data")
         return
     data_array = np.stack(data_list, axis=0)
     labels_array = np.array(labels)

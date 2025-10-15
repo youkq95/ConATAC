@@ -47,21 +47,23 @@ def read_fasta(file_path):
             fasta_dict[header.replace(':','-')] = ''.join(sequence)
     return fasta_dict
 
-def CPSC_pipeline(cell_line, work_dic, mode, bw_type, file_path):
+def CPSC_pipeline(cell_line, work_dic, mode, bw_type, file_path, species):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     pre_dic = os.path.join(work_dic, cell_line, mode)
     os.makedirs(pre_dic, exist_ok=True)
 
     print(f"all files saved to: {pre_dic}")
 
-    # 读取 Excel
     sheet_name = cell_line
     df = pd.read_excel(file_path, sheet_name=sheet_name)
     filtered_df = df[df['end'] - df['start'] <= 10000]
-    ATAC = filtered_df[['chr', 'start', 'end', 'chromHMM_state_type', 'condensation_propensity']]
+    if species == 'human':
+        ATAC = filtered_df[['chr', 'start', 'end', 'chromHMM_state_type', 'condensation_propensity']]
+    elif species == 'mouse':
+        ATAC = filtered_df[['chr', 'start', 'end', 'condensation_propensity']].copy()
+        ATAC['chromHMM_state_type'] = filtered_df['state']
     ATAC = ATAC.drop_duplicates(['chr','start','end'])
 
-    # 模式选择
     if mode == 'P':
         sel=['Promoter']
     elif mode == 'E':
@@ -80,15 +82,31 @@ def CPSC_pipeline(cell_line, work_dic, mode, bw_type, file_path):
     pcol4['ID'] = pcol4['chromosome']+'-'+pcol4['start'].astype(str)+'-'+pcol4['end'].astype(str)
     pcol4 = pcol4[pcol4['chromosome'].str.len() < 6]
     pcol4.to_csv(f"{pre_dic}/{mode}.bed", index=False, sep='\t', header=None)
+    if species.lower() == "mouse":
+        pcol4_chrnum = pcol4.copy()
+        pcol4_chrnum["chromosome"] = pcol4_chrnum["chromosome"].map(lambda x:x.strip("chr"))
+        pcol4_chrnum.to_csv(f"{pre_dic}/{mode}_chrnum.bed",index=False,sep='\t',header=None)
 
     if not os.path.exists(f"{pre_dic}/{mode}.bed.fasta"):
-        genome_path = os.path.join(script_dir, "public_data", "GRCh38.p13.genome.fa")
-        subprocess.run([
-            "bedtools", "getfasta",
-            "-fi", genome_path,
-            "-bed", f"{pre_dic}/{mode}.bed",
-            "-fo", f"{pre_dic}/{mode}.bed.fasta"
-        ], check=True)
+        if species.lower() == "human":
+            genome_path = os.path.join(script_dir, "public_data", "GRCh38.p13.genome.fa")
+            command = [
+                "bedtools", "getfasta",
+                "-fi", genome_path,
+                "-bed", f"{pre_dic}/{mode}.bed",
+                "-fo", f"{pre_dic}/{mode}.bed.fasta"
+            ]
+            subprocess.run(command, check=True)
+        elif species.lower() == "mouse":
+            genome_path = os.path.join(script_dir, "public_data", "Mus_musculus.GRCm38.dna.primary_assembly.fa")
+            command = [ 
+                "bedtools", "getfasta",
+                "-fi", genome_path,
+                "-bed", f"{pre_dic}/{mode}_chrnum.bed",
+                "-fo", f"{pre_dic}/{mode}.bed.fasta"
+            ]
+            command.append("-nameOnly")
+            subprocess.run(command, check=True)   
     else:
         print(f"{mode}.bed.fasta exists.")
 
@@ -116,7 +134,6 @@ def CPSC_pipeline(cell_line, work_dic, mode, bw_type, file_path):
 
     print(cell_line+' :Successfully Get motif_count')
 
-    # 模体相似度
     if not os.path.exists(f"{pre_dic}/motif_sim.csv"):
         cal_sim_path = os.path.join(script_dir, "cal_sim.py")
         motif_path = os.path.join(script_dir, "Data", "motif_family_9.csv")
@@ -134,7 +151,6 @@ def CPSC_pipeline(cell_line, work_dic, mode, bw_type, file_path):
 
     print(cell_line + ' :Successfully Get motif_sim')
 
-    # 训练数据
     if not os.path.exists(f"{pre_dic}/traindata.csv"):
         fasta_dict = read_fasta(f"{pre_dic}/{mode}.bed.fasta")
         TRAIN = pcol4.copy()
@@ -146,14 +162,16 @@ def CPSC_pipeline(cell_line, work_dic, mode, bw_type, file_path):
 
     print(cell_line+' :Successfully Get traindata')
 
-    # 距离计算
     if not os.path.exists(f"{pre_dic}/distance.csv"):
         df_regions = pd.read_csv(f"{pre_dic}/traindata.csv")
         df_regions['Chromosome'] = df_regions['chromosome']
         df_regions['Start'] = pd.to_numeric(df_regions['start'])
         df_regions['End'] = pd.to_numeric(df_regions['end'])
         pr_regions = pr.PyRanges(df_regions.reset_index(drop=False))
-        gtf_path = os.path.join(script_dir, "public_data", "gencode.v47.basic.annotation.gtf")
+        if species.lower() == "human":
+            gtf_path = os.path.join(script_dir, "public_data", "gencode.v47.basic.annotation.gtf")
+        elif species.lower() == "mouse":
+            gtf_path = os.path.join(script_dir, "public_data", "gencode.vM25.basic.annotation.gtf")
         pr_gtf = pr.read_gtf(gtf_path)
         pr_transcripts = pr_gtf[pr_gtf.Feature == 'transcript']
         tss_df = pr_transcripts.df.copy()
@@ -171,7 +189,6 @@ def CPSC_pipeline(cell_line, work_dic, mode, bw_type, file_path):
 
     print(cell_line+' :Successfully Get distance')
 
-    # database.sh
     if not os.path.exists(f"{pre_dic}/features_{bw_type}"):
         database_path = os.path.join(script_dir, "database.sh")
         subprocess.run(["bash", database_path, cell_line, bw_type, mode], check=True, cwd=work_dic)
@@ -188,9 +205,10 @@ def main():
     parser.add_argument("--mode", type=str, required=True, choices=["P", "E", "EP"], help="mode")
     parser.add_argument("--bw_type", type=str, required=True, help="BigWig type")
     parser.add_argument("--file_path", type=str, required=True, help="Excel path")
+    parser.add_argument("--species", type=str, required=True, choices=["human", "mouse"], help="species: human or mouse")
     args = parser.parse_args()
 
-    CPSC_pipeline(args.cell_line, args.work_dic, args.mode, args.bw_type, args.file_path)
+    CPSC_pipeline(args.cell_line, args.work_dic, args.mode, args.bw_type, args.file_path, args.species)
     print('\n'+args.cell_line+'\nAll file ready\n################\n')
 
 if __name__ == "__main__":

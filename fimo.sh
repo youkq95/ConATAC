@@ -12,12 +12,12 @@ NUM_PEAKS_PER_FILE=1000
 MAX_JOBS=86              
 
 if [ ! -f "${MOTIF_FILE}" ]; then
-  echo "error：MOTIF file not exist - ${MOTIF_FILE}"
+  echo "error:MOTIF file not exist - ${MOTIF_FILE}"
   exit 1
 fi
 
 if [ ! -f "${INPUT_FASTA}" ]; then
-  echo "error：FASTA file not exist - ${INPUT_FASTA}"
+  echo "error:FASTA file not exist - ${INPUT_FASTA}"
   exit 1
 fi
 
@@ -42,7 +42,7 @@ awk -v size="${NUM_PEAKS_PER_FILE}" -v outdir="${SPLIT_DIR}" '
 ' "${INPUT_FASTA}"
 
 if [ -z "$(ls -A "${SPLIT_DIR}"/*.fa 2>/dev/null)" ]; then
-  echo "error：FASTA file split failed"
+  echo "error:FASTA file split failed"
   exit 1
 fi
 
@@ -60,7 +60,7 @@ for fasta_chunk in "${fasta_chunks[@]}"; do
   
   echo "Submitting ${chunk_name} task..."
   
-  /home/ykq/meme/bin/fimo \
+  ../../meme/bin/fimo \
     --verbosity 1 \
     --no-pgc \
     --thresh 1.0E-4 \

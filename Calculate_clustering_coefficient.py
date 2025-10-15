@@ -11,8 +11,8 @@ import ast
 
 chromosomes_order = [f'chr{i}' for i in range(1, 22 + 1)] + ['chrX']
 
-def process_and_plot(all_peaks_df, gold_df, title_prefix, output_subdir):
-    output_dir = os.path.join('GM12878', f"{output_subdir}_kmeans_ari_curves")
+def process_and_plot(all_peaks_df, gold_df, title_prefix, output_subdir, cell_line):
+    output_dir = os.path.join(cell_line, f"{output_subdir}_kmeans_ari_curves")
     os.makedirs(output_dir, exist_ok=True)
 
     best_n_by_chr = {}
@@ -65,7 +65,7 @@ def process_and_plot(all_peaks_df, gold_df, title_prefix, output_subdir):
         plt.savefig(output_filename, format='pdf', bbox_inches='tight')
         plt.close()
 
-    output_mode_dir = os.path.join('GM12878', output_subdir)
+    output_mode_dir = os.path.join(cell_line, output_subdir)
     os.makedirs(output_mode_dir, exist_ok=True)
     coefficient_file = os.path.join(output_mode_dir, f'{output_subdir}_coefficient.txt')
     with open(coefficient_file, 'w') as f:
@@ -74,7 +74,7 @@ def process_and_plot(all_peaks_df, gold_df, title_prefix, output_subdir):
     print(f"\n--- {output_subdir}_coefficient.txt down ---")
     return best_n_by_chr
 
-def calculate_and_write_combined_coefficients(p_results, e_results):
+def calculate_and_write_combined_coefficients(p_results, e_results, cell_line):
     ep_coefficients = {}
     for chrom in chromosomes_order:
         p_value = p_results.get(chrom, [0, 0])[0] if isinstance(p_results.get(chrom), tuple) else p_results.get(chrom)
@@ -82,7 +82,7 @@ def calculate_and_write_combined_coefficients(p_results, e_results):
         if p_value and e_value:
             ep_coefficients[chrom] = (p_value + e_value) / 2
 
-    output_mode_dir = os.path.join('GM12878', 'EP')
+    output_mode_dir = os.path.join(cell_line, 'EP')
     os.makedirs(output_mode_dir, exist_ok=True)
     coefficient_file = os.path.join(output_mode_dir, 'EP_coefficient.txt')
     with open(coefficient_file, 'w') as f:
@@ -99,8 +99,52 @@ def load_coefficient_file(path):
         return {}
     return ast.literal_eval("{" + content + "}")
 
-def main(file_path, sheet_name, mode):
-    df = pd.read_excel(file_path, sheet_name=sheet_name)
+def adjust_mouse_coefficients(file_path, cell_line):
+    gm_df = pd.read_excel(file_path, sheet_name="GM12878")
+    mouse_df = pd.read_excel(file_path, sheet_name=cell_line)
+    mouse_df = mouse_df[mouse_df['chr'].astype(str).str.len() <= 6]
+    
+    mouse_chromosomes_order = [f'chr{i}' for i in range(1, 19 + 1)] + ['chrX']
+    
+    gm_df = gm_df[gm_df['chr'].isin(mouse_chromosomes_order)]
+    mouse_df = mouse_df[mouse_df['chr'].isin(mouse_chromosomes_order)]
+
+    gm_counts = gm_df['chr'].value_counts().to_dict()
+    mouse_counts = mouse_df['chr'].value_counts().to_dict()
+    coefficients = {}
+    for chrom in mouse_chromosomes_order:
+        gm_val = gm_counts.get(chrom, 0)
+        mouse_val = mouse_counts.get(chrom, 0)
+        if gm_val > 0:
+            coefficients[chrom] = mouse_val / gm_val
+        else:
+            coefficients[chrom] = 0.0
+    
+    p_coeff_path = os.path.join("GM12878", 'P', 'P_coefficient.txt')
+    if not os.path.exists(p_coeff_path):
+        raise FileNotFoundError(f"There is no {p_coeff_path}")
+    
+    p_results = load_coefficient_file(p_coeff_path)
+    
+    adjusted_results = {}
+    for chrom, val in p_results.items():
+        coef = coefficients.get(chrom, 1.0)
+        adjusted_results[chrom] = val * coef
+    
+    output_dir = os.path.join(cell_line, "P")
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, "P_coefficient.txt")
+    with open(output_file, 'w') as f:
+        f.write(", ".join([f'"{chrom}":{int(round(v))}' for chrom, v in adjusted_results.items()]) + "\n")
+    
+    print(f"\n--- P_coefficient.txt down ---")
+
+def main(file_path, cell_line, mode, species):
+    if species == "mouse":
+        adjust_mouse_coefficients(file_path, cell_line)
+        return 
+    
+    df = pd.read_excel(file_path, sheet_name=cell_line)
     df = df[df['chr'].astype(str).str.len() <= 6]
     df['chr'] = pd.Categorical(df['chr'], categories=chromosomes_order, ordered=True)
     df['center'] = (df['start'] + df['end']) / 2
@@ -108,27 +152,29 @@ def main(file_path, sheet_name, mode):
     if mode == "P":
         all_peaks_df = df[df['chromHMM_state_type'] == 'Promoter']
         gold_df = all_peaks_df[(all_peaks_df['condensation_propensity'] == 'HCP') & (all_peaks_df['hub'].notna())]
-        process_and_plot(all_peaks_df, gold_df, 'Promoter', 'P')
+        process_and_plot(all_peaks_df, gold_df, 'Promoter', 'P', cell_line)
 
     elif mode == "E":
         all_peaks_df = df[df['chromHMM_state_type'] == 'Enhancer']
         gold_df = all_peaks_df[(all_peaks_df['condensation_propensity'] == 'HCP') & (all_peaks_df['hub'].notna())]
-        process_and_plot(all_peaks_df, gold_df, 'Enhancer', 'E')
+        process_and_plot(all_peaks_df, gold_df, 'Enhancer', 'E', cell_line)
 
     elif mode == "EP":
-        p_path = os.path.join('GM12878', 'P', 'P_coefficient.txt')
-        e_path = os.path.join('GM12878', 'E', 'E_coefficient.txt')
+        p_path = os.path.join(cell_line, 'P', 'P_coefficient.txt')
+        e_path = os.path.join(cell_line, 'E', 'E_coefficient.txt')
         p_results = load_coefficient_file(p_path)
         e_results = load_coefficient_file(e_path)
-        calculate_and_write_combined_coefficients(p_results, e_results)
+        calculate_and_write_combined_coefficients(p_results, e_results, cell_line)
 
     else:
         raise ValueError("mode must be P, E or EP")
+    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process clustering ARI curves for genomic data.")
-    parser.add_argument("file_path", help="Path to the Excel file (e.g. TableS1.xlsx)")
-    parser.add_argument("sheet_name", help="Sheet name in the Excel file (e.g. GM12878)")
-    parser.add_argument("mode", choices=["P", "E", "EP"], help="mode: P=Promoter, E=Enhancer, EP=Combine both")
+    parser.add_argument("--file_path", type=str, required=True, help="Path to the Excel file (e.g. TableS1.xlsx)")
+    parser.add_argument("--cell_line", type=str, required=True, help="Cell line in the Excel file (e.g. GM12878)")
+    parser.add_argument("--mode", type=str, required=True, choices=["P", "E", "EP"], help="mode: P=Promoter, E=Enhancer, EP=Combine both")
+    parser.add_argument("--species", type=str, required=True, choices=["human", "mouse"], help="Species type: human or mouse")
     args = parser.parse_args()
-    main(args.file_path, args.sheet_name, args.mode)
+    main(args.file_path, args.cell_line, args.mode, args.species)

@@ -7,18 +7,15 @@ import seaborn as sns
 
 
 def load_data(prob_path):
-    """加载概率文件和标签文件"""
     label_path = prob_path.replace('probs', 'labels')
     y_prob = np.load(prob_path)
     y_true = np.load(label_path)
-    # 如果输出多列概率，取正类的概率
     if y_prob.ndim > 1 and y_prob.shape[1] > 1:
         y_prob = y_prob[:, 1]
     return y_true, y_prob
 
 
 def plot_roc(y_true, y_prob, color, label_text, filename):
-    """计算并绘制 ROC 曲线"""
     fpr, tpr, thresholds = roc_curve(y_true, y_prob)
     auc_value = roc_auc_score(y_true, y_prob)
     plt.figure(figsize=(6, 5), dpi=300)
@@ -37,7 +34,6 @@ def plot_roc(y_true, y_prob, color, label_text, filename):
 
 
 def plot_pr(y_true, y_prob, color, label_text, filename):
-    """计算并绘制 PR 曲线"""
     precision, recall, thresholds = precision_recall_curve(y_true, y_prob)
     avg_precision = np.mean(precision)
     plt.figure(figsize=(6, 5), dpi=300)
@@ -55,7 +51,6 @@ def plot_pr(y_true, y_prob, color, label_text, filename):
 
 
 def plot_confusion_matrix(y_true, y_prob, filename):
-    """绘制阈值下的混淆矩阵"""
     fpr, tpr, thresholds = roc_curve(y_true, y_prob)
     optimal_idx = np.argmax(tpr - fpr)
     optimal_threshold = thresholds[optimal_idx]

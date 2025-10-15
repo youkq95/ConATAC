@@ -15,41 +15,18 @@ import pandas as pd
 import pyBigWig
 from sklearn.preprocessing import OneHotEncoder
 
-
-# =============================================================================
-# 1. WORKER PROCESS INITIALIZATION
-# =============================================================================
-
 def init_worker(motif_db_path, motif_to_family_map, new_features_arr, extra_features_arr, bw_filenames_list):
-    """
-    Initializer for each worker process.
-    REFACTOR v2: Now takes the path to the SQLite DB instead of a CSV path.
-    The large data is no longer loaded into memory here.
-    """
     global worker_motif_db_path, worker_motif_to_family, worker_new_features, worker_extra_features, worker_bw_files
 
     logging.info(f"Initializing worker PID: {os.getpid()}")
 
-    # Store paths and small objects
     worker_motif_db_path = motif_db_path
     worker_motif_to_family = motif_to_family_map
     worker_new_features = new_features_arr
     worker_extra_features = extra_features_arr
-
-    # Open bigWig files - each worker holds its own file handles
     worker_bw_files = [pyBigWig.open(bw_file) for bw_file in bw_filenames_list]
 
-
-# =============================================================================
-# 2. DATABASE PREPARATION
-# =============================================================================
-
 def prepare_motif_database(csv_path, db_path):
-    """
-    NEW: Converts the large motif CSV file to an indexed SQLite database.
-    This is a one-time operation. If the DB file already exists, it does nothing.
-    It reads the CSV in chunks to handle very large files without high memory usage.
-    """
     if os.path.exists(db_path):
         logging.info(f"Found existing motif database: {db_path}. Skipping creation.")
         return
@@ -57,11 +34,8 @@ def prepare_motif_database(csv_path, db_path):
     logging.warning(f"Motif database not found. Creating new one from {csv_path}. This may take a while...")
 
     try:
-        # Connect to SQLite DB
         conn = sqlite3.connect(db_path)
-
-        # Read the CSV in chunks and append to the SQL table
-        chunk_size = 500000  # Process 100k rows at a time
+        chunk_size = 500000  
         for i, chunk in enumerate(pd.read_csv(
                 csv_path,
                 names=["motif_alt_id", "strand", "chr", "s1", "e1"],
@@ -74,7 +48,6 @@ def prepare_motif_database(csv_path, db_path):
             chunk.to_sql('motifs', conn, if_exists='append', index=False)
             logging.info(f"  ... Wrote chunk {i + 1}")
 
-        # Create indexes for fast querying
         logging.info("Finished writing data. Now creating database indexes...")
         cursor = conn.cursor()
         cursor.execute("CREATE INDEX idx_chr ON motifs (chr);")
@@ -85,7 +58,6 @@ def prepare_motif_database(csv_path, db_path):
 
     except Exception as e:
         logging.error(f"Failed to create motif database: {e}")
-        # Clean up partial file if creation failed
         if os.path.exists(db_path):
             os.remove(db_path)
         raise
@@ -93,13 +65,7 @@ def prepare_motif_database(csv_path, db_path):
         if 'conn' in locals() and conn:
             conn.close()
 
-
-# =============================================================================
-# 3. CORE LOGIC & HELPER FUNCTIONS (No changes here)
-# =============================================================================
-
 def setup_logger(log_dir):
-    """设置日志记录器"""
     os.makedirs(log_dir, exist_ok=True)
     timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
     log_file = os.path.join(log_dir, f'processing_log_{timestamp}.log')
@@ -115,7 +81,6 @@ def setup_logger(log_dir):
 
 
 def load_motif_to_family(filename):
-    """从 txt 文件加载 motif_to_family 映射关系"""
     motif_to_family = {}
     with open(filename, 'r') as file:
         for line in file:
@@ -168,17 +133,7 @@ def sliding_window(chromosome, start, end, sequence, segment_motifs, all_familie
 
     return windows_meta, np.array(features_list)
 
-
-# =============================================================================
-# 4. REFACTORED WORKER TASK (MODIFIED FOR INDIVIDUAL FILE OUTPUT)
-# =============================================================================
-
 def process_segment_refactored(args):
-    """
-    Refactored worker function v3.
-    MODIFIED: Saves its output to a dedicated .npy file for the segment.
-    """
-    # REFACTOR v3: Added save_dir to the arguments
     i, row, window_size, step_size, all_families_sorted, family_index_map, save_dir = args
     chromosome, start, end, sequence = row['chromosome'], row['start'], row['end'], row['sequence']
 
@@ -193,21 +148,17 @@ def process_segment_refactored(args):
             all_families_sorted, family_index_map, window_size, step_size
         )
 
-        # 如果这个片段没有产生任何窗口/特征，则成功返回，不做任何操作
         if features.shape[0] == 0:
             return (i, True, "No windows generated, skipped file save.")
 
-        # 整合所有特征
         new_features_for_windows = np.tile(worker_new_features[i], (features.shape[0], 1))
         extra_features_for_windows = np.tile(worker_extra_features[i], (features.shape[0], 1))
         segment_all_features = np.column_stack((features, new_features_for_windows, extra_features_for_windows))
 
-        # REFACTOR v3: Construct filename and save the file directly from the worker.
         filename = f"{chromosome}-{start}-{end}.npy"
         save_path = os.path.join(save_dir, filename)
         np.save(save_path, segment_all_features)
 
-        # 返回成功状态和保存的文件路径
         return (i, True, save_path)
 
     except Exception:
@@ -216,13 +167,7 @@ def process_segment_refactored(args):
         if conn:
             conn.close()
 
-
-# =============================================================================
-# 5. MAIN ORCHESTRATION (MODIFIED FOR NEW WORKER BEHAVIOR)
-# =============================================================================
-
 def main(args):
-    """Main execution function"""
     output_dir = os.path.join(args.work_dir, args.test_dir)
     log_dir = os.path.join(output_dir, "logs")
     save_dir = os.path.join(output_dir, f"features_{args.bw_type}")
@@ -257,7 +202,6 @@ def main(args):
 
         initializer_args = (motif_db_path, motif_to_family, new_features, extra_features, args.bw_filenames)
 
-        # REFACTOR v3: Add save_dir to the tasks list for each worker.
         tasks = [(i, row, args.window_size, args.step_size, all_families, family_index, save_dir) for i, row in
                  data.iterrows()]
 
@@ -267,13 +211,12 @@ def main(args):
         failure_count = 0
 
         with Pool(processes=args.num_workers, initializer=init_worker, initargs=initializer_args) as pool:
-            # REFACTOR v3: The main process now only monitors progress.
             results = pool.imap_unordered(process_segment_refactored, tasks)
 
             for i, (idx, status, message) in enumerate(results):
                 if status:
                     success_count += 1
-                    if (success_count % 500 == 0):  # Log less frequently for this mode
+                    if (success_count % 500 == 0): 
                         logger.info(f"Successfully processed {success_count} segments...")
                 else:
                     failure_count += 1
@@ -290,18 +233,11 @@ def main(args):
         logger.error(f"A fatal error occurred in the main process: {e}")
         logger.error(traceback.format_exc())
 
-# =============================================================================
-# 6. TESTING & ENTRYPOINT (No changes needed)
-# =============================================================================
-
-# (Testing functionality is omitted for brevity but should be retained from the previous version)
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="High-performance feature extraction for genomic sequences (V2 - DB enabled).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    # ... (rest of the argparse setup remains the same as previous version) ...
     run_group = parser.add_argument_group('Standard Execution Arguments')
     run_group.add_argument('--work_dir', type=str, help='Path to the work directory.')
     run_group.add_argument('--test_dir', type=str, help='Path to the test/experiment sub-directory.')
@@ -312,15 +248,10 @@ if __name__ == "__main__":
     config_group.add_argument('--num_workers', type=int, default=8, help='Number of worker processes to use.')
     config_group.add_argument('--window_size', type=int, default=200, help='Size of the sliding window.')
     config_group.add_argument('--step_size', type=int, default=100, help='Step size for the sliding window.')
-    # test_group = parser.add_argument_group('Testing')
-    # test_group.add_argument('--run_test', action='store_true', help='Run the built-in test with mock data.')
     args = parser.parse_args()
 
-    # if args.run_test:
-    #     run_test()
-    # else:
-    required_args = ['work_dir', 'test_dir', 'bw_filenames', 'motif_family_file']
+    required_args = ['work_dir', 'test_dir', 'bw_filenames', 'motif_family_file', 'bw_type']
     if not all(getattr(args, arg) for arg in required_args):
         parser.error(
-            "For a standard run, --work_dir, --test_dir, --bw_filenames, and --motif_family_file are required.")
+            "For a standard run, --work_dir, --test_dir, --bw_filenames, --bw_type and --motif_family_file are required.")
     main(args)
