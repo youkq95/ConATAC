@@ -18,7 +18,7 @@ Enter the public_data folder, where you will find a readme file that contains in
 
 Step 4: Ensure the Directory Structure is Consistent
 After downloading all the necessary data, please check whether your directory structure matches the following template:
-
+```
 your_project_folder/
 │
 ├── public_data/
@@ -41,7 +41,7 @@ your_project_folder/
 ├── TableS1.xlsx
 │
 └──  other python files
-
+```
 Step 5:Pipeline Execution in Jupyter Notebook
 
 We will execute the data processing pipeline step-by-step using Python scripts.
@@ -60,9 +60,9 @@ Available choices are bulk and sc(single cell). If the species is set to mouse, 
 Use the species parameter to select whether to process human cells or mouse cells.
 Available choices are human and mouse.
 
-##################################################################################################################################
+###
 If in Step 1 the species is set to "Mouse CD8 T cells", please first run Step 1 with cell_line=GM12878, mode=P, and species=human.
-##################################################################################################################################
+###
 
 ## Step 1: Calculate Clustering Coefficient
 This script calculates the clustering coefficient using the specified file path, cell line, and mode.
