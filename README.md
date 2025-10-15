@@ -1,22 +1,22 @@
 Welcome to use our code! Please follow the steps below to correctly download and set up your coding environment.
 
-Step 0:
+# Step 0:
 
 Please create your virtual environment based on environment.yml file.
 Ensure that your working environment includes bedtools (version: v2.30.0) and meme (version: 5.5.8).
 
-Step 1: Download the Compressed Package
+# Step 1: Download the Compressed Package
 Please download our compressed package from the following link:
 
 Download Link
 
-Step 2: Extract the Files
+# Step 2: Extract the Files
 Extract the downloaded compressed file into the current folder. After extraction, you should see a folder containing multiple subdirectories and files.
 
-Step 3: Download Necessary Public Data
+# Step 3: Download Necessary Public Data
 Enter the public_data folder, where you will find a readme file that contains instructions on how to obtain the necessary data. Please read carefully and follow the instructions to download the required files.
 
-Step 4: Ensure the Directory Structure is Consistent
+# Step 4: Ensure the Directory Structure is Consistent
 After downloading all the necessary data, please check whether your directory structure matches the following template:
 ```
 your_project_folder/
@@ -42,7 +42,7 @@ your_project_folder/
 │
 └──  other python files
 ```
-Step 5:Pipeline Execution in Jupyter Notebook
+# Step 5:Pipeline Execution in Jupyter Notebook
 
 We will execute the data processing pipeline step-by-step using Python scripts.
 
@@ -60,9 +60,7 @@ Available choices are bulk and sc(single cell). If the species is set to mouse, 
 Use the species parameter to select whether to process human cells or mouse cells.
 Available choices are human and mouse.
 
-###
-If in Step 1 the species is set to "Mouse CD8 T cells", please first run Step 1 with cell_line=GM12878, mode=P, and species=human.
-###
+## If in Step 1 the species is set to "Mouse CD8 T cells", please first run Step 1 with cell_line=GM12878, mode=P, and species=human.
 
 ## Step 1: Calculate Clustering Coefficient
 This script calculates the clustering coefficient using the specified file path, cell line, and mode.
