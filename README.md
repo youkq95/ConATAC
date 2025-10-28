@@ -97,6 +97,17 @@ Finally, visualize the ROCAUC/PRAUC/Confusion Matrix results by generating pictu
 !python picture.py --cell_line GM12878 --mode P --bw_type sc
 ```
 
+## Step 6:Predict
+To make predictions using the `predict.py` script, you can run the following command:
 
-
+```
+!python predict.py \
+    --predict_cell_line 'Mouse CD8 T cells' \
+    --mode P \
+    --bw_type bulk \
+    --model_cell_line GM12878 \
+    --model_path path/to/your/model.pth \
+    --predict_file "path/to/your/file.csv"
+```
+tips:you could use "Mouse CD8 T cells/P/traindata.csv" as predict_file as test
 
